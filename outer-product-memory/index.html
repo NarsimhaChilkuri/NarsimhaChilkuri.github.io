@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Linear attention, the LMU, Mamba, and other state space models as one memory: a sum of outer products of keys and values.">
+<style>body{margin:0}img{max-width:100%}</style>
+<title>Memory as a Sum of Outer Products</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column. Short paragraphs carry the text; labelled equation rows carry the math. */
+:root {
+  --bg: #fbfcfd;
+  --fg: #1a2230;
+  --muted: #5d6878;
+  --rule: #dfe4ea;
+  --eq-bg: #f1f4f8;
+  --accent: #1f5fa8;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161c; --fg: #e3e8ee; --muted: #9aa5b3; --rule: #2a323d;
+    --eq-bg: #1a2029; --accent: #7fb4ee;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161c; --fg: #e3e8ee; --muted: #9aa5b3; --rule: #2a323d;
+  --eq-bg: #1a2029; --accent: #7fb4ee;
+  color-scheme: dark;
+}
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--sans); font-size: 1.0625rem; line-height: 1.65;
+  padding-block: 3rem 5rem;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+main { max-width: 42rem; margin: 0 auto; }
+h1 { font-size: 1.9rem; line-height: 1.2; font-weight: 600; margin: 0 0 1rem; text-wrap: balance; }
+.sub { font-size: 1.2rem; line-height: 1.35; margin: -0.5rem 0 1.25rem; text-wrap: balance; }
+.lead { color: var(--muted); margin: 0; }
+.home { display: inline-block; margin-bottom: 2rem; font-family: var(--mono); font-size: 0.85rem; color: var(--accent); text-decoration: none; }
+.home:hover, .home:focus-visible { text-decoration: underline; }
+.byline { font-family: var(--mono); font-size: 0.8rem; color: var(--muted); margin: 0 0 1.25rem; }
+section { border-top: 1px solid var(--rule); margin-top: 2.25rem; padding-top: 1.5rem;
+  display: flex; flex-direction: column; gap: 0.9rem; }
+section > * { margin: 0; }
+h2 { font-size: 1.25rem; line-height: 1.3; font-weight: 600; text-wrap: balance; }
+h2 .n { font-family: var(--mono); font-size: 0.8rem; font-weight: 500; color: var(--accent);
+  letter-spacing: 0.06em; text-transform: uppercase; display: block; margin-bottom: 0.2rem; }
+h3 { font-size: 1.05rem; font-weight: 600; padding-top: 0.6rem; }
+.eqs { list-style: none; padding: 0; display: grid; gap: 0.4rem; }
+.eqs li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 1rem;
+  background: var(--eq-bg); border-radius: 6px; padding: 0.6rem 0.9rem; }
+.eqs .lab { font-family: var(--mono); font-size: 0.78rem; font-weight: 500; color: var(--muted);
+  letter-spacing: 0.05em; text-transform: uppercase; flex: 0 0 5.5rem; }
+.eqs .m { flex: 1 1 14rem; min-width: 0; overflow-x: auto; overflow-y: hidden; padding-block: 0.15rem; }
+dl.models { display: grid; grid-template-columns: max-content 1fr; gap: 0.7rem 1.25rem; }
+dl.models dt { font-weight: 600; }
+dl.models dd { margin: 0; min-width: 0; }
+@media (max-width: 30rem) {
+  dl.models { grid-template-columns: 1fr; gap: 0.15rem; }
+  dl.models dd { margin-bottom: 0.6rem; }
+}
+figure { display: flex; flex-direction: column; gap: 0.6rem; padding-block: 0.4rem; }
+.panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 0.9rem 1.25rem; }
+.panel { min-width: 0; }
+.panel .t { font-weight: 600; font-size: 0.95rem; }
+.panel .s { color: var(--muted); font-size: 0.85rem; }
+.panel svg { display: block; width: 100%; height: auto; margin-top: 0.25rem; touch-action: pan-y; }
+.panel .axis { stroke: var(--rule); stroke-width: 1; fill: none; }
+.panel .aim { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; fill: none; }
+.panel .line { stroke: var(--accent); stroke-width: 2; fill: none; stroke-linejoin: round; }
+.panel .dot { fill: var(--accent); stroke: var(--bg); stroke-width: 2; }
+.panel .cross { stroke: var(--muted); stroke-width: 1; fill: none; }
+.panel text { fill: var(--muted); font-family: var(--mono); font-size: 10px; }
+.panel text.tip { fill: var(--fg); }
+figcaption { color: var(--muted); font-size: 0.9rem; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+th, td { text-align: left; padding: 0.55rem 1rem 0.55rem 0; border-bottom: 1px solid var(--rule);
+  vertical-align: middle; white-space: nowrap; }
+th { font-family: var(--mono); font-size: 0.75rem; font-weight: 500; color: var(--muted);
+  letter-spacing: 0.05em; text-transform: uppercase; }
+td:last-child, th:last-child { padding-right: 0; }
+mjx-container { color: var(--fg); }
+</style>
+<script>
+window.MathJax = { tex: { inlineMath: [['\\(', '\\)']] }, svg: { fontCache: 'global' } };
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js"></script>
+
+</head>
+<body>
+<main>
+<a class="home" href="../">&larr; Narsimha Chilkuri</a>
+<h1>Memory as a Sum of Outer Products</h1>
+<p class="sub">One view of linear attention, the LMU, and state space models</p>
+<p class="byline">12 November 2026</p>
+<p class="lead">Linear attention, the LMU, Mamba, and other state space models (SSMs) look complicated and unrelated. This post shows that all of them are the same simple memory: a sum of outer products of keys and values. The models differ only in how they make the keys.</p>
+
+<section>
+<h2><span class="n">Section 1</span>A memory made of keys and values</h2>
+<p>We want to store some values \(v_1, v_2, \dots, v_N\). Each value is a vector of dimension \(d\).</p>
+<p>The simplest method is a list. We append each value, and the position of a value in the list is its address. For \(N\) values this is a matrix of size \(N \times d\). The list grows with each new value.</p>
+<p>A second method is to give each value \(v_i\) a key \(k_i\) of dimension \(d_k\), and to add the outer products of keys and values into one matrix:</p>
+<ul class="eqs">
+  <li><span class="lab">Memory</span><span class="m">\(\displaystyle S = \sum_{i=1}^{N} k_i\, v_i^\top\)</span></li>
+</ul>
+<p>The size of \(S\) is \(d_k \times d\). It does not grow when we add more values. To read, we multiply \(S\) from the left by a query \(q\). If the keys are orthonormal and we use the key \(k_r\) as the query, we get the value \(v_r\) back exactly:</p>
+<ul class="eqs">
+  <li><span class="lab">Read</span><span class="m">\(\displaystyle k_r^\top S = \sum_{i=1}^{N} (k_r^\top k_i)\, v_i^\top = v_r^\top\)</span></li>
+</ul>
+<p>This works because \(k_r^\top k_i = 1\) when \(i = r\), and \(0\) for all other \(i\). The list is a special case of this memory: use the one-hot vectors as keys, and each row of \(S\) is one of the values.</p>
+</section>
+
+<section>
+<h2><span class="n">Section 2</span>Approximate memory</h2>
+<p>Now assume that the space for the memory is fixed. The list must discard old values to make room for new ones, and a discarded value is lost completely.</p>
+<p>The key memory never discards anything. But there are at most \(d_k\) orthonormal vectors of dimension \(d_k\). When we store more than \(d_k\) values, the keys overlap, and the read gives the value plus some noise from the other values:</p>
+<ul class="eqs">
+  <li><span class="lab">Read</span><span class="m">\(\displaystyle k_r^\top S = \underbrace{v_r^\top}_{\text{signal}} + \underbrace{\sum_{i \neq r} (k_r^\top k_i)\, v_i^\top}_{\text{noise}}\)</span></li>
+</ul>
+<p>So the choice is between a memory that forgets some values completely and a memory that remembers all values a little less clearly. From here, we use only the key memory.</p>
+<p>Until now the query was one of the keys. In general the query \(q\) can be any vector. The read is then a linear combination of all the stored values:</p>
+<ul class="eqs">
+  <li><span class="lab">Read</span><span class="m">\(\displaystyle q^\top S = \sum_{i=1}^{N} (q^\top k_i)\, v_i^\top = h_1 v_1^\top + h_2 v_2^\top + \dots + h_N v_N^\top\)</span></li>
+  <li><span class="lab">Weight</span><span class="m">\(\displaystyle h_i = q^\top k_i\)</span></li>
+</ul>
+<p>The weight \(h_i\) on the value \(v_i\) is the dot product of the query with the key of that value. A query that matches one key gives mostly that one value. A query that matches several keys gives a mix of their values.</p>
+</section>
+
+<section>
+<h2><span class="n">Section 3</span>Delete</h2>
+<p>Next, we want to delete one pair \((k_d, v_d)\) from the memory. If we know the key and the value, we subtract their outer product. If we know only the key, we first read the value with the key, and then subtract what we read.</p>
+<ul class="eqs">
+  <li><span class="lab">Know \(k_d, v_d\)</span><span class="m">\(\displaystyle S \leftarrow S - k_d\, v_d^\top\)</span></li>
+  <li><span class="lab">Know \(k_d\)</span><span class="m">\(\displaystyle S \leftarrow S - k_d\,(k_d^\top S) = (I - k_d k_d^\top)\, S\)</span></li>
+</ul>
+<p>The matrix \(I - k_d k_d^\top\) is a projection (for a key of unit length). It removes everything that \(S\) stores along the direction \(k_d\).</p>
+<p>Both forms need the key. Must we then store all the keys next to \(S\)? That would use the space that we wanted to save. We do not have to store the keys if we have a rule that makes them. The next two sections give such a rule.</p>
+</section>
+
+<section>
+<h2><span class="n">Section 4</span>One value at a time</h2>
+<p>Until now we had all the values at one time. In a sequence model, the values come one at each time step. We start with \(S_0 = 0\) and add one outer product at each step:</p>
+<ul class="eqs">
+  <li><span class="lab">Write</span><span class="m">\(\displaystyle S_t = S_{t-1} + k_t\, v_t^\top\)</span></li>
+  <li><span class="lab">Read</span><span class="m">\(\displaystyle y_t^\top = q_t^\top S_t\)</span></li>
+</ul>
+<p>This looks very much like a linear dynamical system. The standard form of such a system, with our matrix \(S\) as the state, is:</p>
+<ul class="eqs">
+  <li><span class="lab">Write</span><span class="m">\(\displaystyle S_t = A\, S_{t-1} + b\, v_t^\top\)</span></li>
+  <li><span class="lab">Read</span><span class="m">\(\displaystyle y_t^\top = c^\top S_t\)</span></li>
+</ul>
+<p>Here \(A\) is a \(d_k \times d_k\) matrix, and \(b\) and \(c\) are vectors of dimension \(d_k\). When \(A\), \(b\), and \(c\) are the same at every step, the system is called linear time-invariant (LTI). We look at this case first, because it is the easiest to understand. Section 7 lets them change with time.</p>
+</section>
+
+<section>
+<h2><span class="n">Section 5</span>Unroll the system: the keys come from \(A\) and \(b\)</h2>
+<p>To see what the LTI system stores, we apply the write equation again and again, from step \(1\) to step \(t\):</p>
+<ul class="eqs">
+  <li><span class="lab">Memory</span><span class="m">\(\displaystyle S_t = \sum_{i=1}^{t} A^{\,t-i}\, b\, v_i^\top = b\, v_t^\top + A b\, v_{t-1}^\top + \dots + A^{t-1} b\, v_1^\top\)</span></li>
+</ul>
+<p>This is the memory of Section 1 again, a sum of outer products of keys and values. The key of a value is now not stored and not chosen by us. The system makes it. A value that arrived \(n\) steps ago has the key:</p>
+<ul class="eqs">
+  <li><span class="lab">Key</span><span class="m">\(\displaystyle k(n) = A^{\,n}\, b\)</span></li>
+</ul>
+<p>Each value gets the key \(b\) when it is written. After that, \(A\) transforms the key once at each step. So the key of a value depends only on its age \(n\), and not on what the value is. This is the rule that Section 3 asked for.</p>
+<p>The read uses the fixed query \(c\). As in Section 2, the read is a linear combination of the stored values, and the weight on a value is the dot product of the query with its key:</p>
+<ul class="eqs">
+  <li><span class="lab">Read</span><span class="m">\(\displaystyle y_t = \sum_{n=0}^{t-1} h(n)\, v_{t-n}, \qquad h(n) = c^\top k(n) = c^\top A^{\,n}\, b\)</span></li>
+</ul>
+<p>The weight \(h(n)\) on a value depends only on its age. We say that an LTI memory <strong>addresses by time</strong>: it can read "the value from 5 steps ago", but it cannot read "the value that looked like this one". To read the value from 5 steps ago, we choose a \(c\) that matches its key \(k(5)\), and that matches the keys of the other ages as little as possible. How well this works depends on the keys. The matrix \(A\) and the vector \(b\) decide which weight curves \(h\) are possible, and \(c\) selects one of them.</p>
+</section>
+
+<section>
+<h2><span class="n">Section 6</span>Four LTI memories</h2>
+<p>We now look at four choices of \(A\) and \(b\), from the simplest to the LMU. For each one we ask the same three questions. What are the keys? What can a read get back? How does the memory forget?</p>
+
+<h3>Scalar decay</h3>
+<p>Let \(A = \alpha I\) with \(0 \lt \alpha \lt 1\). Then:</p>
+<ul class="eqs">
+  <li><span class="lab">Key</span><span class="m">\(\displaystyle k(n) = \alpha^{\,n}\, b\)</span></li>
+  <li><span class="lab">Weight</span><span class="m">\(\displaystyle h(n) = (c^\top b)\, \alpha^{\,n}\)</span></li>
+</ul>
+<p>The key becomes smaller by the factor \(\alpha\) at each step, so old values fade out of every read. This is a second way to delete. The projection in Section 3 deletes by key. Decay deletes by age. A value loses half of its weight after \(\ln 2 / \ln(1/\alpha)\) steps, which is about 23 steps for \(\alpha = 0.97\).</p>
+<p>But this memory is very weak. All the keys point in the same direction \(b\); they differ only in length. We can see this when we write out the memory:</p>
+<ul class="eqs">
+  <li><span class="lab">Memory</span><span class="m">\(\displaystyle S_t = \sum_{i=1}^{t} \alpha^{\,t-i}\, b\, v_i^\top = b\, v_t^\top + \alpha\, b\, v_{t-1}^\top + \alpha^2\, b\, v_{t-2}^\top + \dots\)</span></li>
+  <li><span class="lab">Read</span><span class="m">\(\displaystyle y_t = (c^\top b) \sum_{i=1}^{t} \alpha^{\,t-i}\, v_i\)</span></li>
+</ul>
+<p>Every outer product has the same vector \(b\) on the left, so \(S_t\) has rank one. Whatever \(c\) we choose, the read gives back the same running average of the values, only scaled by the number \(c^\top b\). To tell the values apart, \(A\) must turn the keys into different directions.</p>
+
+<h3>Diagonal \(A\)</h3>
+<p>Let \(A = \mathrm{diag}(\lambda_1, \dots, \lambda_{d_k})\) with a different number between 0 and 1 for each row.</p>
+<ul class="eqs">
+  <li><span class="lab">Key</span><span class="m">\(\displaystyle k(n) = A^{\,n}\, b = \begin{bmatrix} \lambda_1^{\,n}\, b_1 \\ \lambda_2^{\,n}\, b_2 \\ \vdots \\ \lambda_{d_k}^{\,n}\, b_{d_k} \end{bmatrix}\)</span></li>
+  <li><span class="lab">Weight</span><span class="m">\(\displaystyle h(n) = c^\top k(n) = c_1 b_1 \lambda_1^{\,n} + c_2 b_2 \lambda_2^{\,n} + \dots + c_{d_k} b_{d_k} \lambda_{d_k}^{\,n}\)</span></li>
+</ul>
+<p>Each row of \(S\) is now a running average with its own speed. A row with a small \(\lambda\) remembers only the last few values. A row with \(\lambda\) near 1 remembers for a long time. Keys of different ages now point in different directions, so \(S\) can have full rank.</p>
+<p>The read adds these rows together, and \(c\) says how much of each row to use. The numbers in \(c\) can be negative. Here is an example with two rows: a slow row with \(\lambda = 0.95\) and a fast row with \(\lambda = 0.5\). Let \(b\) be \((1, 1)\) and \(c\) be \((1, -1)\), so the read is the slow row minus the fast row:</p>
+<ul class="eqs">
+  <li><span class="lab">Weight</span><span class="m">\(\displaystyle h(n) = 0.95^{\,n} - 0.5^{\,n}\)</span></li>
+</ul>
+<p>This weight is 0 for the newest value (age 0). It rises to about 0.75 at age 4, and then falls slowly: 0.36 at age 20 and 0.05 at age 60. The fast row cancels the newest values out of the slow row. So this read means "the past, but not the last one or two steps".</p>
+<p>The limit of this memory is that each decay curve changes only a little from one step to the next, and so does a mix of them. In the example, ages 3, 4, and 5 get almost the same weight (0.73, 0.75, and 0.74). The memory can make a wide bump around age 4. But it cannot put all the weight on age 4 and none on ages 3 and 5, unless \(c\) has very large positive and negative numbers that cancel almost exactly, and that does not work in practice. The next memory can do this easily.</p>
+
+<h3>Shift register</h3>
+<p>Let \(A\) be the shift matrix, which moves each element of a vector one place down and drops the last one. Let \(b\) be the first one-hot vector. For \(d_k = 4\):</p>
+<ul class="eqs">
+  <li><span class="lab">Matrices</span><span class="m">\(\displaystyle A = \begin{bmatrix} 0 &amp; 0 &amp; 0 &amp; 0 \\ 1 &amp; 0 &amp; 0 &amp; 0 \\ 0 &amp; 1 &amp; 0 &amp; 0 \\ 0 &amp; 0 &amp; 1 &amp; 0 \end{bmatrix} \qquad b = \begin{bmatrix} 1 \\ 0 \\ 0 \\ 0 \end{bmatrix}\)</span></li>
+  <li><span class="lab">Keys</span><span class="m">\(\displaystyle k(0) = \begin{bmatrix} 1 \\ 0 \\ 0 \\ 0 \end{bmatrix} \quad k(1) = \begin{bmatrix} 0 \\ 1 \\ 0 \\ 0 \end{bmatrix} \quad k(2) = \begin{bmatrix} 0 \\ 0 \\ 1 \\ 0 \end{bmatrix} \quad k(3) = \begin{bmatrix} 0 \\ 0 \\ 0 \\ 1 \end{bmatrix} \quad k(4) = \begin{bmatrix} 0 \\ 0 \\ 0 \\ 0 \end{bmatrix}\)</span></li>
+  <li><span class="lab">Read</span><span class="m">\(\displaystyle y_t = c_1 v_t + c_2 v_{t-1} + c_3 v_{t-2} + c_4 v_{t-3}\)</span></li>
+</ul>
+<p>These keys are orthonormal, so this is the exact memory of Section 1. The first row of \(S_t\) is the newest value, the second row is the value before it, and so on. A one-hot \(c\) gets one of these values back exactly, and a general \(c\) gives any weighted sum of the last \(d_k\) values.</p>
+<p>The memory forgets in a hard way. A value falls off the end after \(d_k\) steps, because \(A^{d_k} = 0\). This is the list of Section 1 with a fixed length. It is exact, but it is expensive: a window of 1000 steps needs 1000 rows.</p>
+
+<h3>The LMU</h3>
+<p>The Legendre Memory Unit (LMU) has the same goal as the shift register: remember a window of the last \(\theta\) steps. But it uses far fewer than \(\theta\) rows. The idea is to store a compressed description of the window, in place of the window itself.</p>
+<p>The LMU starts from a continuous-time system \(\theta\, \dot m = A_c\, m + b_c\, u\), with a fixed matrix \(A_c\) and a fixed vector \(b_c\). The subscript means "continuous"; it is not the read vector \(c\). Our memory works in steps, so we convert them to the per-step \(A\) and \(b\) of Section 4. For \(d_k = 3\):</p>
+<ul class="eqs">
+  <li><span class="lab">Matrices</span><span class="m">\(\displaystyle A_c = \begin{bmatrix} -1 &amp; -1 &amp; -1 \\ \phantom{-}3 &amp; -3 &amp; -3 \\ -5 &amp; \phantom{-}5 &amp; -5 \end{bmatrix} \qquad b_c = \begin{bmatrix} \phantom{-}1 \\ -3 \\ \phantom{-}5 \end{bmatrix}\)</span></li>
+  <li><span class="lab">Per step</span><span class="m">\(\displaystyle A = e^{A_c/\theta}, \qquad b = A_c^{-1}(A - I)\, b_c\)</span></li>
+</ul>
+<p>For a larger \(d_k\) the pattern continues: the rows are scaled by the odd numbers 1, 3, 5, 7, and the signs below the diagonal alternate. Nothing here is learned. \(A\) and \(b\) are derived so that the system does one job as well as possible: delay its input by \(\theta\) steps. To see what that does to the memory, we again look at the keys. Inside the window, each element of the key is close to a Legendre polynomial of the age:</p>
+<ul class="eqs">
+  <li><span class="lab">Key</span><span class="m">\(\displaystyle k(n) = A^{\,n}\, b \approx \frac{1}{\theta} \begin{bmatrix} P_0(n/\theta) \\ 3\, P_1(n/\theta) \\ 5\, P_2(n/\theta) \\ \vdots \end{bmatrix} \ \text{ for } n \lt \theta, \qquad k(n) \approx 0 \ \text{ for } n \ge \theta\)</span></li>
+</ul>
+<p>Here \(P_0, P_1, P_2, \dots\) are the Legendre polynomials, shifted to the interval from 0 to 1. \(P_0\) is constant, \(P_1\) is a straight line, \(P_2\) is a parabola, and so on. The match becomes better as \(d_k\) grows. Each row of \(S_t\) is then the window of the last \(\theta\) values, weighted by one of these polynomials. In other words, \(S_t\) holds the first \(d_k\) Legendre coefficients of the window: row 0 is its average, row 1 is its slope, and the higher rows hold finer and finer detail.</p>
+<p>To read the value from \(n\) steps ago, we evaluate the same polynomials at that age:</p>
+<ul class="eqs">
+  <li><span class="lab">Query</span><span class="m">\(\displaystyle c = \begin{bmatrix} P_0(n/\theta) \\ P_1(n/\theta) \\ P_2(n/\theta) \\ \vdots \end{bmatrix}\)</span></li>
+</ul>
+<p>How good is this read? There are \(\theta\) different ages in the window, but only \(d_k\) dimensions for the keys. So the keys of different ages cannot be orthogonal, and we are in the situation of Section 2: the read gives signal plus noise. The useful property of the LMU is where the noise comes from. Keys of similar ages are similar, and keys of very different ages are almost orthogonal. So the noise comes from the neighbours in time. The read gives a local average around the age that we asked for.</p>
+
+<figure>
+  <div class="panels" id="panels"></div>
+  <figcaption>The weight \(h(n)\) that each memory puts on a value of age \(n\), when we ask it for the value from 40 steps ago. The window is \(\theta = 128\) steps. The dashed line marks age 40. Each panel has its own vertical scale, and the weights in each panel sum to about 1. Hover or tap to read the numbers.</figcaption>
+</figure>
+
+<p>The figure shows this. Scalar decay cannot aim at age 40 at all. The shift register hits it exactly, with 128 rows. The LMU with 8 rows gives a bump about 30 steps wide around age 40. With 32 rows the bump is about 8 steps wide. The small waves next to the bump are the price of using a finite number of polynomials. The width of the bump is roughly \(2\theta / d_k\), so the number of rows sets the resolution in time.</p>
+<p>The exact delay is only one possible read. Because the read is linear, any weight curve over the window that is a polynomial of degree below \(d_k\) is some \(c\). An average of the window, a trend, or a difference between recent and old values are all easy. In an LMU layer the model learns \(c\), one for each output channel, so each channel learns its own smooth filter over the last \(\theta\) steps.</p>
+<p>The LMU also forgets by age, like the shift register, but softly: the weight of a value drops to about zero once it is older than \(\theta\).</p>
+<p>S4 is a close relative. It uses the same LTI form, takes its \(A\) and \(b\) from the same kind of derivation (the HiPPO framework, with a different weighting of the past), and then trains them together with \(c\). The analysis above applies to it in the same way, so we do not treat it separately.</p>
+</section>
+
+<section>
+<h2><span class="n">Section 7</span>Let the model choose: time-varying systems</h2>
+<p>An LTI memory addresses only by time, because its keys do not depend on the values. To address by content, we let \(A\), \(b\), and \(c\) change at each step, and we let the model compute them from the current input \(x_t\):</p>
+<ul class="eqs">
+  <li><span class="lab">Write</span><span class="m">\(\displaystyle S_t = A_t\, S_{t-1} + b_t\, v_t^\top\)</span></li>
+  <li><span class="lab">Read</span><span class="m">\(\displaystyle y_t^\top = c_t^\top S_t\)</span></li>
+</ul>
+<p>Each part now has a clear job. \(b_t\) is the key of the new value, so it decides where to write. \(A_t\) changes the old memory, so it decides what to forget. \(c_t\) is the query, so it decides what to read. Unrolling works as before, and the weight on the value \(v_i\) at time \(t\) is:</p>
+<ul class="eqs">
+  <li><span class="lab">Weight</span><span class="m">\(\displaystyle h(t, i) = c_t^\top\, A_t A_{t-1} \cdots A_{i+1}\, b_i\)</span></li>
+</ul>
+<p>This is the same weight \(h\) as in Section 5. There it depended only on the age \(n = t - i\), so we wrote \(h(n)\). Now \(A\), \(b\), and \(c\) change with time, so two values of the same age can get different weights, and we must write \(h(t, i)\). If \(A\), \(b\), and \(c\) are fixed, the formula gives \(c^\top A^{\,t-i}\, b\) again.</p>
+<p>In the models below, the value, the key, and the query all come from the input through learned matrices:</p>
+<ul class="eqs">
+  <li><span class="lab">From input</span><span class="m">\(\displaystyle v_t = W_v\, x_t, \qquad k_t = W_k\, x_t, \qquad q_t = W_q\, x_t\)</span></li>
+</ul>
+<p>The key says what the current input is about. The query says what the model is looking for at this step. This is the big change from Section 6, where the key of a value depended only on its age. We now look at four well-known models. Each one is a simple case of the system above.</p>
+
+<h3>Linear attention</h3>
+<p>Linear attention sets \(A_t = I\), \(b_t = k_t\), and \(c_t = q_t\). This is the first system of Section 4:</p>
+<ul class="eqs">
+  <li><span class="lab">Write</span><span class="m">\(\displaystyle S_t = S_{t-1} + k_t\, v_t^\top\)</span></li>
+  <li><span class="lab">Weight</span><span class="m">\(\displaystyle h(t, i) = q_t^\top k_i\)</span></li>
+</ul>
+<p>The weight is large when the query and the key point in a similar direction. So the model reads the values whose content matches what it is looking for now. The age of a value plays no role.</p>
+<p>It helps to compare this with standard (softmax) attention. Softmax attention keeps all the keys and values in a list, as in Section 1, and its weight is \(\exp(q_t^\top k_i)\), divided by the sum of these weights. The list grows with the sequence. Linear attention drops the exponential. Then the weighted sum of values can be kept in the fixed-size matrix \(S_t\), and the list is not needed.</p>
+<p>The price is the noise of Section 2. Nothing is ever deleted, so in a long sequence many keys overlap, and each read picks up a little of many values that it did not ask for.</p>
+
+<h3>RetNet</h3>
+<p>RetNet keeps the keys and queries of linear attention and sets \(A_t = \gamma I\), with a fixed number \(\gamma\) a little below 1. This adds the scalar decay of Section 6:</p>
+<ul class="eqs">
+  <li><span class="lab">Write</span><span class="m">\(\displaystyle S_t = \gamma\, S_{t-1} + k_t\, v_t^\top\)</span></li>
+  <li><span class="lab">Weight</span><span class="m">\(\displaystyle h(t, i) = \gamma^{\,t-i}\; q_t^\top k_i\)</span></li>
+</ul>
+<p>The weight is a content match, made smaller with age. Old values fade, so they add less noise to the read, and the memory does not fill up. But the forgetting is blind. An important old value fades at the same rate as an unimportant one.</p>
+
+<h3>Mamba-2</h3>
+<p>Mamba-2 first computes a step size \(\Delta_t\) from the input \(x_t\). It is a positive number (a softplus of a linear function of \(x_t\)). The step size then sets both how much to forget and how strongly to write. The key \(k_t\) and the query \(q_t\) come from the input as before, and \(\alpha\) is a learned positive number.</p>
+<ul class="eqs">
+  <li><span class="lab">Choices</span><span class="m">\(\displaystyle A_t = a_t I, \quad a_t = e^{-\alpha \Delta_t}, \qquad b_t = \Delta_t\, k_t, \qquad c_t = q_t\)</span></li>
+  <li><span class="lab">Write</span><span class="m">\(\displaystyle S_t = e^{-\alpha \Delta_t}\, S_{t-1} + \Delta_t\, k_t\, v_t^\top\)</span></li>
+  <li><span class="lab">Weight</span><span class="m">\(\displaystyle h(t, i) = e^{-\alpha (\Delta_{i+1} + \dots + \Delta_t)}\; \Delta_i\; q_t^\top k_i\)</span></li>
+</ul>
+<p>This is decay again, but the model chooses the amount at each step, and the same number controls the write. With a small \(\Delta_t\), the decay factor is near 1 and the new outer product is small: the model keeps its memory and almost skips the input. With a large \(\Delta_t\), the decay factor is near 0 and the new outer product is large: the model clears its memory and writes the input strongly. So the model can pass over unimportant inputs and reset its memory at a boundary, for example at the start of a new topic.</p>
+<p>The weight has three parts. \(q_t^\top k_i\) is the content match, as in linear attention. \(\Delta_i\) is how strongly the value was written. The exponential is the decay, and it depends on the sum of the step sizes since the write. So Mamba-2 does not measure the age of a value in steps. It measures how much has happened since. The forgetting depends on content, but one step still shrinks all the stored values by the same factor.</p>
+
+<h3>DeltaNet</h3>
+<p>DeltaNet sets \(A_t = I - \beta_t\, k_t k_t^\top\) and \(b_t = \beta_t\, k_t\). The key \(k_t\) has unit length, and \(\beta_t\) is a number between 0 and 1 that the model computes from the input. This \(A_t\) is the delete-by-key of Section 3:</p>
+<ul class="eqs">
+  <li><span class="lab">Write</span><span class="m">\(\displaystyle S_t = (I - \beta_t\, k_t k_t^\top)\, S_{t-1} + \beta_t\, k_t\, v_t^\top\)</span></li>
+  <li><span class="lab">Same as</span><span class="m">\(\displaystyle S_t = S_{t-1} + \beta_t\, k_t \left( v_t^\top - k_t^\top S_{t-1} \right)\)</span></li>
+</ul>
+<p>The second form shows what happens. The term \(k_t^\top S_{t-1}\) is what the memory gives back now for the key \(k_t\). The model compares it with the new value \(v_t\) and writes only the difference. With \(\beta_t = 1\), a read with \(k_t\) after the write gives exactly \(v_t\): the new value has replaced the old one. With \(\beta_t = 0\), nothing is written.</p>
+<p>So DeltaNet forgets by key and not by age. A write changes only what is stored along \(k_t\). Values with very different keys are not touched, however old they are.</p>
+
+<h3>How the four compare</h3>
+<p>All four models address by content, and all four build their keys and queries from the input. They differ in \(A_t\), which means they differ in how they forget. Linear attention never forgets. RetNet forgets by age at a fixed rate. Mamba-2 forgets by age at a rate that it chooses. DeltaNet forgets by key.</p>
+<p>These ideas can be combined. Gated DeltaNet uses \(A_t = a_t\,(I - \beta_t\, k_t k_t^\top)\) with a decay factor \(a_t\) between 0 and 1, which is the decay of Mamba-2 together with the delete-by-key of DeltaNet. The original Mamba is close to Mamba-2, but each column of \(S\) has its own diagonal \(A_t\). It is the diagonal memory of Section 6 with decay rates that the model chooses.</p>
+</section>
+
+<section>
+<h2><span class="n">Section 8</span>Summary</h2>
+<p>All the models above use the same two equations: write \(S_t = A_t S_{t-1} + b_t v_t^\top\) and read \(y_t^\top = c_t^\top S_t\). A read is always a weighted sum of the past values. The table shows how each model makes its keys and how it forgets.</p>
+<div class="tablewrap">
+<table>
+  <thead>
+    <tr><th>Model</th><th>\(A_t\)</th><th>\(b_t\)</th><th>\(c_t\)</th><th>Addresses by</th><th>Forgets by</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Scalar decay</td><td>\(\alpha I\)</td><td>\(b\)</td><td>\(c\)</td><td>Time (one average)</td><td>Age, fixed rate</td></tr>
+    <tr><td>Diagonal</td><td>\(\mathrm{diag}(\lambda_1, \dots, \lambda_{d_k})\)</td><td>\(b\)</td><td>\(c\)</td><td>Time (smooth)</td><td>Age, one rate per row</td></tr>
+    <tr><td>Shift register</td><td>shift</td><td>one-hot</td><td>\(c\)</td><td>Time (exact)</td><td>Age, hard window</td></tr>
+    <tr><td>LMU</td><td>Legendre</td><td>Legendre</td><td>\(c\), learned</td><td>Time (width \(\approx 2\theta/d_k\))</td><td>Age, soft window</td></tr>
+    <tr><td>Linear attention</td><td>\(I\)</td><td>\(k_t\)</td><td>\(q_t\)</td><td>Content</td><td>Never</td></tr>
+    <tr><td>RetNet</td><td>\(\gamma I\)</td><td>\(k_t\)</td><td>\(q_t\)</td><td>Content</td><td>Age, fixed rate</td></tr>
+    <tr><td>Mamba-2</td><td>\(e^{-\alpha \Delta_t} I\)</td><td>\(\Delta_t k_t\)</td><td>\(q_t\)</td><td>Content</td><td>Age, rate from the input</td></tr>
+    <tr><td>DeltaNet</td><td>\(I - \beta_t k_t k_t^\top\)</td><td>\(\beta_t k_t\)</td><td>\(q_t\)</td><td>Content</td><td>Key</td></tr>
+  </tbody>
+</table>
+</div>
+<p>The two halves of the table are good at different things. The LTI memories know when a value arrived but not what it was. The attention-style memories know what a value was but, without help, not when it arrived. Both are the same outer-product memory with different keys.</p>
+</section>
+</main>
+
+<script>
+(function () {
+  var N = 161, AIM = 40, THETA = 128;
+  var D = {"lmu8":[0.0174,0.0114,0.006,0.0013,-0.0028,-0.0062,-0.0089,-0.0109,-0.0123,-0.013,-0.0132,-0.0128,-0.0119,-0.0106,-0.0089,-0.0068,-0.0044,-0.0017,0.0011,0.0041,0.0071,0.0102,0.0133,0.0164,0.0194,0.0223,0.0251,0.0277,0.0301,0.0322,0.0342,0.0359,0.0374,0.0386,0.0396,0.0403,0.0407,0.0409,0.0409,0.0406,0.0401,0.0394,0.0385,0.0375,0.0362,0.0349,0.0334,0.0317,0.03,0.0283,0.0264,0.0246,0.0227,0.0208,0.0189,0.017,0.0151,0.0133,0.0116,0.0099,0.0083,0.0067,0.0053,0.0039,0.0027,0.0015,0.0005,-0.0005,-0.0014,-0.0021,-0.0028,-0.0034,-0.0038,-0.0042,-0.0045,-0.0047,-0.0049,-0.005,-0.005,-0.0049,-0.0048,-0.0047,-0.0045,-0.0043,-0.004,-0.0037,-0.0034,-0.0031,-0.0028,-0.0024,-0.0021,-0.0018,-0.0014,-0.0011,-0.0008,-0.0005,-0.0002,0.0,0.0003,0.0005,0.0007,0.0009,0.0011,0.0012,0.0013,0.0014,0.0015,0.0015,0.0016,0.0016,0.0016,0.0015,0.0015,0.0015,0.0014,0.0013,0.0013,0.0012,0.0011,0.001,0.0009,0.0008,0.0007,0.0006,0.0005,0.0004,0.0003,0.0002,0.0001,0.0,-0.0001,-0.0001,-0.0002,-0.0003,-0.0003,-0.0004,-0.0004,-0.0004,-0.0005,-0.0005,-0.0005,-0.0005,-0.0005,-0.0005,-0.0005,-0.0005,-0.0005,-0.0004,-0.0004,-0.0004,-0.0004,-0.0003,-0.0003,-0.0003,-0.0003,-0.0002,-0.0002,-0.0002,-0.0001,-0.0001,-0.0001],"lmu32":[0.0044,-0.0076,-0.0016,0.0094,0.003,-0.008,-0.0089,0.0001,0.0092,0.0104,0.003,-0.0069,-0.0124,-0.01,-0.0013,0.0088,0.0145,0.013,0.0046,-0.0066,-0.0157,-0.0184,-0.0133,-0.002,0.0114,0.0218,0.0248,0.0188,0.0047,-0.0135,-0.0302,-0.0395,-0.0368,-0.0202,0.0093,0.0477,0.089,0.1266,0.1544,0.168,0.1658,0.1486,0.1197,0.0842,0.0475,0.0146,-0.0106,-0.0261,-0.0317,-0.0288,-0.0201,-0.0087,0.0025,0.0111,0.0157,0.0162,0.013,0.0074,0.0011,-0.0046,-0.0084,-0.01,-0.0092,-0.0066,-0.0029,0.0009,0.0041,0.006,0.0064,0.0055,0.0035,0.0011,-0.0013,-0.0031,-0.0041,-0.0041,-0.0033,-0.0019,-0.0003,0.0012,0.0022,0.0028,0.0027,0.0021,0.0011,0.0001,-0.0009,-0.0015,-0.0018,-0.0017,-0.0013,-0.0007,0.0,0.0006,0.001,0.0012,0.0011,0.0008,0.0004,0.0,-0.0004,-0.0007,-0.0008,-0.0007,-0.0005,-0.0002,0.0,0.0003,0.0004,0.0005,0.0004,0.0003,0.0001,0.0,-0.0002,-0.0003,-0.0003,-0.0003,-0.0002,-0.0001,0.0,0.0001,0.0002,0.0002,0.0002,0.0001,0.0001,0.0,-0.0001,-0.0001,-0.0001,-0.0001,-0.0001,0.0,0.0,0.0,0.0001,0.0001,0.0001,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]};
+  var decay = [], shift = [];
+  for (var n = 0; n < N; n++) { decay.push(0.03 * Math.pow(0.97, n)); shift.push(n === AIM ? 1 : 0); }
+  var panels = [
+    { t: 'Scalar decay', s: 'α = 0.97, in effect 1 row', y: decay },
+    { t: 'Shift register', s: '128 rows', y: shift },
+    { t: 'LMU', s: '8 rows', y: D.lmu8.slice(0, N) },
+    { t: 'LMU', s: '32 rows', y: D.lmu32.slice(0, N) }
+  ];
+  var NS = 'http://www.w3.org/2000/svg';
+  function el(tag, attrs, parent, text) {
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    parent.appendChild(e);
+    return e;
+  }
+  var W = 320, H = 170, L = 38, R = 10, T = 16, B = 26;
+  var host = document.getElementById('panels');
+  panels.forEach(function (p) {
+    var wrap = document.createElement('div');
+    wrap.className = 'panel';
+    var head = document.createElement('div');
+    head.innerHTML = '<span class="t"></span> <span class="s"></span>';
+    head.children[0].textContent = p.t;
+    head.children[1].textContent = p.s;
+    wrap.appendChild(head);
+    var svg = el('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img',
+      'aria-label': p.t + ', ' + p.s + ': weight against age when reading the value from 40 steps ago' }, wrap);
+    var max = Math.max.apply(null, p.y), min = Math.min(0, Math.min.apply(null, p.y));
+    var x = function (n) { return L + (W - L - R) * n / (N - 1); };
+    var y = function (v) { return T + (H - T - B) * (max - v) / (max - min); };
+    el('line', { class: 'axis', x1: L, x2: W - R, y1: y(0), y2: y(0) }, svg);
+    el('line', { class: 'aim', x1: x(AIM), x2: x(AIM), y1: T, y2: H - B }, svg);
+    [0, AIM, THETA, N - 1].forEach(function (n) {
+      el('text', { x: x(n), y: H - 8, 'text-anchor': 'middle' }, svg, n === THETA ? 'θ=128' : String(n));
+    });
+    el('text', { x: L - 6, y: y(0) + 3, 'text-anchor': 'end' }, svg, '0');
+    el('text', { x: L - 6, y: y(max) + 3, 'text-anchor': 'end' }, svg, max >= 1 ? '1' : max.toFixed(2));
+    var d = p.y.map(function (v, n) { return (n ? 'L' : 'M') + x(n).toFixed(1) + ' ' + y(v).toFixed(1); }).join('');
+    el('path', { class: 'line', d: d }, svg);
+    var cross = el('line', { class: 'cross', y1: T, y2: H - B, visibility: 'hidden' }, svg);
+    var dot = el('circle', { class: 'dot', r: 4, visibility: 'hidden' }, svg);
+    var tip = el('text', { class: 'tip', x: W - R, y: 10, 'text-anchor': 'end' }, svg, '');
+    function show(ev) {
+      var r = svg.getBoundingClientRect();
+      var n = Math.round(((ev.clientX - r.left) / r.width * W - L) / (W - L - R) * (N - 1));
+      n = Math.max(0, Math.min(N - 1, n));
+      cross.setAttribute('x1', x(n)); cross.setAttribute('x2', x(n));
+      dot.setAttribute('cx', x(n)); dot.setAttribute('cy', y(p.y[n]));
+      cross.setAttribute('visibility', 'visible'); dot.setAttribute('visibility', 'visible');
+      tip.textContent = 'age ' + n + '  weight ' + p.y[n].toFixed(3);
+    }
+    function hide() {
+      cross.setAttribute('visibility', 'hidden'); dot.setAttribute('visibility', 'hidden'); tip.textContent = '';
+    }
+    svg.addEventListener('pointermove', show);
+    svg.addEventListener('pointerdown', show);
+    svg.addEventListener('pointerleave', hide);
+    host.appendChild(wrap);
+  });
+})();
+</script>
+</body>
+</html>
