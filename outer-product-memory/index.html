@@ -80,6 +80,10 @@ figure { display: flex; flex-direction: column; gap: 0.6rem; padding-block: 0.4r
 .panel text.tip { fill: var(--fg); }
 figcaption { color: var(--muted); font-size: 0.9rem; }
 .tablewrap { overflow-x: auto; }
+.refs { margin: 0; padding-left: 1.4rem; font-size: 0.95rem; display: grid; gap: 0.55rem; }
+.refs li::marker { color: var(--muted); font-family: var(--mono); font-size: 0.8rem; }
+.refs a { color: var(--accent); }
+.refs .for { color: var(--muted); }
 table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
 th, td { text-align: left; padding: 0.55rem 1rem 0.55rem 0; border-bottom: 1px solid var(--rule);
   vertical-align: middle; white-space: nowrap; }
@@ -226,11 +230,11 @@ window.MathJax = { tex: { inlineMath: [['\\(', '\\)']] }, svg: { fontCache: 'glo
   <li><span class="lab">Matrices</span><span class="m">\(\displaystyle A_c = \begin{bmatrix} -1 &amp; -1 &amp; -1 \\ \phantom{-}3 &amp; -3 &amp; -3 \\ -5 &amp; \phantom{-}5 &amp; -5 \end{bmatrix} \qquad b_c = \begin{bmatrix} \phantom{-}1 \\ -3 \\ \phantom{-}5 \end{bmatrix}\)</span></li>
   <li><span class="lab">Per step</span><span class="m">\(\displaystyle A = e^{A_c/\theta}, \qquad b = A_c^{-1}(A - I)\, b_c\)</span></li>
 </ul>
-<p>For a larger \(d_k\) the pattern continues: the rows are scaled by the odd numbers 1, 3, 5, 7, and the signs below the diagonal alternate. Nothing here is learned. \(A\) and \(b\) are derived so that the system does one job as well as possible: delay its input by \(\theta\) steps. To see what that does to the memory, we again look at the keys. Inside the window, each element of the key is close to a Legendre polynomial of the age:</p>
+<p>For a larger \(d_k\) the pattern continues: the rows are scaled by the odd numbers 1, 3, 5, 7, and the signs below the diagonal alternate. Nothing here is learned. \(A\) and \(b\) are derived so that the system does one job as well as possible: delay its input by \(\theta\) steps. To see what that does to the memory, we again look at the keys. Inside the window, each element of the key roughly follows a Legendre polynomial of the age:</p>
 <ul class="eqs">
   <li><span class="lab">Key</span><span class="m">\(\displaystyle k(n) = A^{\,n}\, b \approx \frac{1}{\theta} \begin{bmatrix} P_0(n/\theta) \\ 3\, P_1(n/\theta) \\ 5\, P_2(n/\theta) \\ \vdots \end{bmatrix} \ \text{ for } n \lt \theta, \qquad k(n) \approx 0 \ \text{ for } n \ge \theta\)</span></li>
 </ul>
-<p>Here \(P_0, P_1, P_2, \dots\) are the Legendre polynomials, shifted to the interval from 0 to 1. \(P_0\) is constant, \(P_1\) is a straight line, \(P_2\) is a parabola, and so on. The match becomes better as \(d_k\) grows. Each row of \(S_t\) is then the window of the last \(\theta\) values, weighted by one of these polynomials. In other words, \(S_t\) holds the first \(d_k\) Legendre coefficients of the window: row 0 is its average, row 1 is its slope, and the higher rows hold finer and finer detail.</p>
+<p>Here \(P_0, P_1, P_2, \dots\) are the Legendre polynomials, shifted to the interval from 0 to 1. \(P_0\) is constant, \(P_1\) is a straight line, \(P_2\) is a parabola, and so on. The match is only rough for a small \(d_k\), and it becomes better as \(d_k\) grows. Each row of \(S_t\) is then the window of the last \(\theta\) values, weighted by one of these polynomials. In other words, \(S_t\) holds the first \(d_k\) Legendre coefficients of the window: row 0 is its average, row 1 is its slope, and the higher rows hold finer and finer detail.</p>
 <p>To read the value from \(n\) steps ago, we evaluate the same polynomials at that age:</p>
 <ul class="eqs">
   <li><span class="lab">Query</span><span class="m">\(\displaystyle c = \begin{bmatrix} P_0(n/\theta) \\ P_1(n/\theta) \\ P_2(n/\theta) \\ \vdots \end{bmatrix}\)</span></li>
@@ -329,6 +333,23 @@ window.MathJax = { tex: { inlineMath: [['\\(', '\\)']] }, svg: { fontCache: 'glo
 </table>
 </div>
 <p>The two halves of the table are good at different things. The LTI memories know when a value arrived but not what it was. The attention-style memories know what a value was but, without help, not when it arrived. Both are the same outer-product memory with different keys.</p>
+</section>
+
+<section>
+<h2>References</h2>
+<p>None of the models in this post are new. These are the papers that introduced them, and the papers that first made the connections between them.</p>
+<ol class="refs">
+  <li>Voelker, Kajić, and Eliasmith. <a href="https://papers.nips.cc/paper/2019/hash/952285b9b7e7a1be5aa7849f32ffff05-Abstract.html">Legendre Memory Units: Continuous-Time Representation in Recurrent Neural Networks</a>. NeurIPS 2019. <span class="for">The LMU.</span></li>
+  <li>Gu, Dao, Ermon, Rudra, and Ré. <a href="https://arxiv.org/abs/2008.07669">HiPPO: Recurrent Memory with Optimal Polynomial Projections</a>. NeurIPS 2020. <span class="for">The general derivation behind the LMU and S4 matrices.</span></li>
+  <li>Gu, Goel, and Ré. <a href="https://arxiv.org/abs/2111.00396">Efficiently Modeling Long Sequences with Structured State Spaces</a>. ICLR 2022. <span class="for">S4.</span></li>
+  <li>Katharopoulos, Vyas, Pappas, and Fleuret. <a href="https://arxiv.org/abs/2006.16236">Transformers are RNNs: Fast Autoregressive Transformers with Linear Attention</a>. ICML 2020. <span class="for">Linear attention as a recurrence.</span></li>
+  <li>Schlag, Irie, and Schmidhuber. <a href="https://arxiv.org/abs/2102.11174">Linear Transformers Are Secretly Fast Weight Programmers</a>. ICML 2021. <span class="for">Linear attention as an outer-product memory, its capacity limit, and the delta rule.</span></li>
+  <li>Sun et al. <a href="https://arxiv.org/abs/2307.08621">Retentive Network: A Successor to Transformer for Large Language Models</a>. 2023. <span class="for">RetNet.</span></li>
+  <li>Gu and Dao. <a href="https://arxiv.org/abs/2312.00752">Mamba: Linear-Time Sequence Modeling with Selective State Spaces</a>. 2023. <span class="for">Mamba.</span></li>
+  <li>Dao and Gu. <a href="https://arxiv.org/abs/2405.21060">Transformers are SSMs: Generalized Models and Efficient Algorithms Through Structured State Space Duality</a>. ICML 2024. <span class="for">Mamba-2, and the link between state space models and attention.</span></li>
+  <li>Yang, Wang, Zhang, Shen, and Kim. <a href="https://arxiv.org/abs/2406.06484">Parallelizing Linear Transformers with the Delta Rule over Sequence Length</a>. NeurIPS 2024. <span class="for">DeltaNet.</span></li>
+  <li>Yang, Kautz, and Hatamizadeh. <a href="https://arxiv.org/abs/2412.06464">Gated Delta Networks: Improving Mamba2 with Delta Rule</a>. ICLR 2025. <span class="for">Gated DeltaNet.</span></li>
+</ol>
 </section>
 </main>
 
